@@ -1,0 +1,31 @@
+[package]
+name = "zwiperoll"
+version = "0.1.0"
+edition = "2021"
+authors = ["zWipeRoll Team"]
+description = "zWipeRoll - Fast native Windows gallery cleaner. Swipe through. Wipe what you don't need."
+
+[[bin]]
+name = "zwiperoll"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.36.1", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+egui = "0.36.1"
+egui_extras = { version = "0.36.1", features = ["all_loaders"] }
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
+trash = "5.2.7"
+rfd = "0.17.2"
+crossbeam-channel = "0.5"
+walkdir = "2.5"
+chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+directories = "5.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
