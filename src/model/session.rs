@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
 use super::decision::Decision;
 use super::media::MediaEntry;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Session {
@@ -13,7 +13,6 @@ pub struct Session {
 
 #[derive(Debug, Clone, Default)]
 pub struct SessionStats {
-    pub total: usize,
     pub unreviewed: usize,
     pub kept: usize,
     pub trashed: usize,
@@ -36,6 +35,34 @@ impl Session {
 
     pub fn current_item(&self) -> Option<&MediaEntry> {
         self.items.get(self.current_index)
+    }
+
+    pub fn resume_items(
+        &mut self,
+        folder: PathBuf,
+        mut items: Vec<MediaEntry>,
+        progress: Option<&super::library::AlbumProgress>,
+        prior_items: &[MediaEntry],
+    ) {
+        let decisions: std::collections::HashMap<_, _> = prior_items
+            .iter()
+            .map(|item| (&item.path, item.decision))
+            .collect();
+        for item in &mut items {
+            if let Some(decision) = decisions.get(&item.path) {
+                item.decision = *decision;
+            }
+        }
+        let index = progress.map_or(0, |progress| {
+            progress
+                .current_photo
+                .as_ref()
+                .and_then(|photo| items.iter().position(|item| &item.path == photo))
+                .unwrap_or(progress.current_index)
+                .min(items.len().saturating_sub(1))
+        });
+        self.set_items(folder, items);
+        self.current_index = index;
     }
 
     pub fn apply_decision(&mut self, decision: Decision) -> bool {
@@ -77,7 +104,6 @@ impl Session {
 
     pub fn stats(&self) -> SessionStats {
         let mut stats = SessionStats {
-            total: self.items.len(),
             ..Default::default()
         };
 
@@ -98,32 +124,57 @@ impl Session {
     pub fn save_session(&self) {
         if let Some(proj_dirs) = directories::ProjectDirs::from("com", "zWipeRoll", "zWipeRoll") {
             let config_dir = proj_dirs.config_dir();
-            let _ = std::fs::create_dir_all(config_dir);
             let file_path = config_dir.join("session.json");
-            if let Ok(json) = serde_json::to_string_pretty(self) {
-                let _ = std::fs::write(file_path, json);
-            }
+            let _ = self.save_to(&file_path);
         }
     }
 
     pub fn load_session() -> Option<Self> {
         if let Some(proj_dirs) = directories::ProjectDirs::from("com", "zWipeRoll", "zWipeRoll") {
             let file_path = proj_dirs.config_dir().join("session.json");
-            if file_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(file_path) {
-                    if let Ok(sess) = serde_json::from_str::<Self>(&content) {
-                        return Some(sess);
-                    }
-                }
-            }
+            return Self::load_from(&file_path);
         }
         None
+    }
+
+    pub fn save_to(&self, path: &Path) -> std::io::Result<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, serde_json::to_vec_pretty(self)?)
+    }
+
+    pub fn load_from(path: &Path) -> Option<Self> {
+        serde_json::from_slice(&std::fs::read(path).ok()?).ok()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resume_keeps_photo_and_decisions_after_reorder() {
+        let mut session = Session::default();
+        let mut prior = vec![MediaEntry::new("album/a.jpg".into(), 1, None)];
+        prior[0].decision = Decision::Keep;
+        let items = vec![
+            MediaEntry::new("album/b.jpg".into(), 2, None),
+            prior[0].clone(),
+        ];
+        let progress = super::super::library::AlbumProgress {
+            current_index: 0,
+            current_photo: Some("album/a.jpg".into()),
+            viewed_count: 1,
+        };
+        session.resume_items("album".into(), items, Some(&progress), &prior);
+        assert_eq!(
+            session.current_item().unwrap().path,
+            PathBuf::from("album/a.jpg")
+        );
+        assert_eq!(session.current_index, 1);
+        assert_eq!(session.stats().kept, 1);
+    }
 
     #[test]
     fn test_decision_and_undo() {
@@ -159,5 +210,29 @@ mod tests {
         let stats_after_undo = session.stats();
         assert_eq!(stats_after_undo.trashed, 0);
         assert_eq!(stats_after_undo.unreviewed, 2);
+    }
+
+    #[test]
+    fn missing_current_photo_uses_clamped_index_and_empty_album_is_safe() {
+        let progress = super::super::library::AlbumProgress {
+            viewed_count: 2,
+            current_index: 9,
+            current_photo: Some("deleted.jpg".into()),
+        };
+        let mut session = Session::default();
+        session.resume_items(
+            "album".into(),
+            vec![MediaEntry::new("remaining.jpg".into(), 1, None)],
+            Some(&progress),
+            &[],
+        );
+        assert_eq!(
+            session.current_item().unwrap().path,
+            PathBuf::from("remaining.jpg")
+        );
+        assert_eq!(session.current_index, 0);
+        session.resume_items("album".into(), vec![], Some(&progress), &[]);
+        assert!(session.current_item().is_none());
+        assert_eq!(session.current_index, 0);
     }
 }

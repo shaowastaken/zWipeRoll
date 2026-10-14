@@ -1,25 +1,18 @@
+use crate::filesystem::{move_to_recycle_bin, DeletionResult};
+use crate::imaging::TextureCache;
+use crate::model::{Decision, Session};
 use egui::{
     vec2, Align, Align2, Color32, CornerRadius, FontId, Layout, Pos2, Rect, RichText, ScrollArea,
     Sense, Stroke, Ui, UiBuilder,
 };
-use crate::filesystem::{move_to_recycle_bin, DeletionResult};
-use crate::imaging::TextureCache;
-use crate::model::{Decision, Session};
 
 pub enum TrashAction {
     None,
 }
 
+#[derive(Default)]
 pub struct TrashGridView {
     deletion_result: Option<DeletionResult>,
-}
-
-impl Default for TrashGridView {
-    fn default() -> Self {
-        Self {
-            deletion_result: None,
-        }
-    }
 }
 
 impl TrashGridView {
@@ -32,6 +25,7 @@ impl TrashGridView {
         ui: &mut Ui,
         session: &mut Session,
         cache: &mut TextureCache,
+        volumes: &[crate::filesystem::volumes::VolumeMount],
     ) -> TrashAction {
         let action = TrashAction::None;
         let stats = session.stats();
@@ -44,12 +38,12 @@ impl TrashGridView {
                 ui.heading(
                     RichText::new("Trash")
                         .size(24.0)
-                        .color(Color32::WHITE)
+                        .color(crate::theme::text(ui.visuals().dark_mode))
                         .strong(),
                 );
                 ui.label(
                     RichText::new("Review the files marked for deletion.")
-                        .color(Color32::from_rgb(142, 171, 192))
+                        .color(crate::theme::muted(ui.visuals().dark_mode))
                         .size(13.0),
                 );
             });
@@ -58,13 +52,13 @@ impl TrashGridView {
                 // Empty button
                 let empty_btn = egui::Button::new(
                     RichText::new("Empty")
-                        .color(Color32::WHITE)
+                        .color(crate::theme::text(ui.visuals().dark_mode))
                         .strong(),
                 )
-                .fill(Color32::from_rgb(38, 59, 76))
+                .fill(crate::theme::surface_raised(ui.visuals().dark_mode))
                 .min_size(vec2(75.0, 32.0));
 
-                if ui.add(empty_btn).clicked() && stats.trashed > 0 {
+                if ui.add_enabled(stats.trashed > 0, empty_btn).clicked() {
                     let trash_targets: Vec<_> = session
                         .items
                         .iter()
@@ -72,9 +66,14 @@ impl TrashGridView {
                         .map(|item| (item.path.clone(), item.file_size))
                         .collect();
 
-                    let res = move_to_recycle_bin(&trash_targets);
-                    session.items.retain(|item| item.decision != Decision::Trash);
-                    session.current_index = session.current_index.min(session.items.len().saturating_sub(1));
+                    let res = move_to_recycle_bin(&trash_targets, volumes);
+                    session.items.retain(|item| {
+                        item.decision != Decision::Trash
+                            || res.errors.iter().any(|(path, _)| path == &item.path)
+                    });
+                    session.current_index = session
+                        .current_index
+                        .min(session.items.len().saturating_sub(1));
                     session.undo_stack.clear();
                     session.save_session();
                     self.deletion_result = Some(res);
@@ -86,13 +85,13 @@ impl TrashGridView {
                     ui.label(
                         RichText::new(format!("{} files", stats.trashed))
                             .size(13.0)
-                            .color(Color32::WHITE)
+                            .color(crate::theme::text(ui.visuals().dark_mode))
                             .strong(),
                     );
                     ui.label(
                         RichText::new(crate::model::media::format_bytes(stats.trash_bytes))
                             .size(11.0)
-                            .color(Color32::from_rgb(142, 171, 192)),
+                            .color(crate::theme::muted(ui.visuals().dark_mode)),
                     );
                 });
             });
@@ -104,20 +103,27 @@ impl TrashGridView {
             let mut close = false;
             let del_cnt = res.deleted_count;
             let freed = res.freed_bytes;
+            let error_count = res.errors.len();
 
             ui.group(|ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new(format!(
-                            "✅ Spostati con successo {} elementi nel Cestino di Windows ({} recuperati)",
+                            "✅ Moved {} items to the Windows Recycle Bin ({} recovered)",
                             del_cnt,
                             crate::model::media::format_bytes(freed)
                         ))
                         .color(Color32::from_rgb(34, 197, 94))
                         .strong(),
                     );
+                    if error_count > 0 {
+                        ui.label(
+                            RichText::new(format!("{error_count} files could not be moved"))
+                                .color(Color32::from_rgb(239, 68, 68)),
+                        );
+                    }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui.button("Chiudi").clicked() {
+                        if ui.button("Close").clicked() {
                             close = true;
                         }
                     });
@@ -133,9 +139,13 @@ impl TrashGridView {
         if stats.trashed == 0 {
             ui.vertical_centered(|ui| {
                 ui.add_space(80.0);
-                ui.label(RichText::new("Nessun elemento nel cestino.").size(16.0).color(Color32::from_rgb(142, 171, 192)));
+                ui.label(
+                    RichText::new("No items in Trash.")
+                        .size(16.0)
+                        .color(crate::theme::muted(ui.visuals().dark_mode)),
+                );
                 ui.add_space(8.0);
-                ui.label("Usa la modalità Review o premi 'A' per contrassegnare le foto da eliminare.");
+                ui.label("Use Review or press A to mark photos for deletion.");
             });
             return action;
         }
@@ -168,14 +178,13 @@ impl TrashGridView {
                             let item = &session.items[idx];
                             cache.request_if_needed(item.path.clone(), 200, 200);
 
-                            let (rect, resp) =
-                                ui.allocate_exact_size(thumb_size, Sense::click());
+                            let (rect, resp) = ui.allocate_exact_size(thumb_size, Sense::click());
                             let is_hover = resp.hovered();
 
                             ui.painter().rect_filled(
                                 rect,
                                 CornerRadius::same(8),
-                                Color32::from_rgb(18, 30, 42),
+                                crate::theme::surface(ui.visuals().dark_mode),
                             );
 
                             if let Some(tex) = cache.get(&item.path) {
@@ -191,7 +200,7 @@ impl TrashGridView {
                                     Align2::CENTER_CENTER,
                                     "📷",
                                     FontId::proportional(22.0),
-                                    Color32::from_rgb(100, 120, 140),
+                                    crate::theme::muted(ui.visuals().dark_mode),
                                 );
                             }
 
@@ -203,13 +212,13 @@ impl TrashGridView {
                                     if is_hover {
                                         Color32::from_rgb(12, 165, 214)
                                     } else {
-                                        Color32::from_rgb(38, 58, 76)
+                                        crate::theme::border(ui.visuals().dark_mode)
                                     },
                                 ),
                                 egui::StrokeKind::Inside,
                             );
 
-                            if resp.on_hover_text("Clicca per ripristinare (Restore)").clicked() {
+                            if resp.on_hover_text("Click to restore").clicked() {
                                 to_restore.push(idx);
                             }
 
@@ -229,11 +238,12 @@ impl TrashGridView {
         // Bottom Action Bar: "342 files selected • 1.8 GB" | Restore All | Move to Recycle Bin
         ui.add_space(8.0);
         let bottom_h = 44.0;
-        let (bar_rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), bottom_h), Sense::hover());
+        let (bar_rect, _) =
+            ui.allocate_exact_size(vec2(ui.available_width(), bottom_h), Sense::hover());
         ui.painter().rect_filled(
             bar_rect,
             CornerRadius::same(10),
-            Color32::from_rgb(20, 34, 46),
+            crate::theme::surface(ui.visuals().dark_mode),
         );
 
         ui.painter().text(
@@ -245,7 +255,7 @@ impl TrashGridView {
                 crate::model::media::format_bytes(stats.trash_bytes)
             ),
             FontId::proportional(13.0),
-            Color32::from_rgb(187, 209, 219),
+            crate::theme::muted(ui.visuals().dark_mode),
         );
 
         // Buttons at right using new_child
@@ -257,7 +267,7 @@ impl TrashGridView {
 
         let del_btn = egui::Button::new(
             RichText::new("Move to Recycle Bin")
-                .color(Color32::WHITE)
+                .color(crate::theme::text(ui.visuals().dark_mode))
                 .strong(),
         )
         .fill(Color32::from_rgb(239, 68, 68))
@@ -271,9 +281,14 @@ impl TrashGridView {
                 .map(|item| (item.path.clone(), item.file_size))
                 .collect();
 
-            let res = move_to_recycle_bin(&trash_targets);
-            session.items.retain(|item| item.decision != Decision::Trash);
-            session.current_index = session.current_index.min(session.items.len().saturating_sub(1));
+            let res = move_to_recycle_bin(&trash_targets, volumes);
+            session.items.retain(|item| {
+                item.decision != Decision::Trash
+                    || res.errors.iter().any(|(path, _)| path == &item.path)
+            });
+            session.current_index = session
+                .current_index
+                .min(session.items.len().saturating_sub(1));
             session.undo_stack.clear();
             session.save_session();
             self.deletion_result = Some(res);
@@ -282,10 +297,9 @@ impl TrashGridView {
         child_ui.add_space(10.0);
 
         let restore_btn = egui::Button::new(
-            RichText::new("Restore All")
-                .color(Color32::WHITE),
+            RichText::new("Restore All").color(crate::theme::text(ui.visuals().dark_mode)),
         )
-        .fill(Color32::from_rgb(38, 59, 76))
+        .fill(crate::theme::surface_raised(ui.visuals().dark_mode))
         .min_size(vec2(100.0, 34.0));
 
         if child_ui.add(restore_btn).clicked() {

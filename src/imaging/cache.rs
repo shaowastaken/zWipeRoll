@@ -1,7 +1,7 @@
+use super::decoder::ImageLoader;
+use egui::{Context, TextureHandle, TextureOptions};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use egui::{Context, TextureHandle, TextureOptions};
-use super::decoder::ImageLoader;
 
 pub struct TextureCache {
     loader: ImageLoader,

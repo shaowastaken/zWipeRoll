@@ -4,7 +4,9 @@ mod app;
 mod filesystem;
 mod imaging;
 mod model;
+mod theme;
 mod views;
+mod window_chrome;
 
 use app::PcSpongeApp;
 use eframe::egui::{vec2, IconData, ViewportBuilder};
@@ -29,8 +31,13 @@ use image::GenericImageView;
 fn main() -> eframe::Result {
     let mut viewport = ViewportBuilder::default()
         .with_title("zWipeRoll - Gallery & Photo Cleaner")
-        .with_inner_size(vec2(1150.0, 780.0))
-        .with_min_inner_size(vec2(850.0, 580.0))
+        .with_inner_size(vec2(1100.0, 700.0))
+        .with_min_inner_size(vec2(820.0, 540.0))
+        .with_resizable(true)
+        .with_maximized(false)
+        .with_fullscreen(false)
+        .with_decorations(false)
+        .with_transparent(false)
         .with_drag_and_drop(true);
 
     if let Some(icon) = load_app_icon() {
@@ -39,6 +46,8 @@ fn main() -> eframe::Result {
 
     let native_options = eframe::NativeOptions {
         viewport,
+        persist_window: false,
+        centered: true,
         ..Default::default()
     };
 

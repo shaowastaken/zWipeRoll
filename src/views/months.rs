@@ -30,13 +30,13 @@ impl MonthView {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
 
-            if ui.button("📁 Scegli Cartella").clicked() {
+            if ui.button("📁 Choose Folder").clicked() {
                 action = MonthAction::SelectFolder;
             }
 
             if ui
                 .button(
-                    RichText::new("🔍 Cerca Tutte le Immagini del PC")
+                    RichText::new("🔍 Scan All Drives")
                         .color(Color32::from_rgb(12, 165, 214)), // Azure #0CA5D6
                 )
                 .clicked()
@@ -47,7 +47,7 @@ impl MonthView {
             if let Some(folder) = &session.folder {
                 ui.label(
                     RichText::new(format!("Sorgente: {}", folder.display()))
-                        .color(Color32::from_rgb(187, 209, 219)), // Mist
+                        .color(crate::theme::muted(ui.visuals().dark_mode)), // Mist
                 );
             }
 
@@ -55,8 +55,8 @@ impl MonthView {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if stats.trashed > 0 {
                     let summary_btn = egui::Button::new(
-                        RichText::new(format!("🗑️ Riepilogo Cestino ({})", stats.trashed))
-                            .color(Color32::WHITE)
+                        RichText::new(format!("🗑️ Trash Summary ({})", stats.trashed))
+                            .color(crate::theme::text(ui.visuals().dark_mode))
                             .strong(),
                     )
                     .fill(Color32::from_rgb(239, 68, 68));
@@ -69,7 +69,7 @@ impl MonthView {
                 if stats.total > 0 {
                     let swipe_all_btn = egui::Button::new(
                         RichText::new("⚡ Inizia da Prima Foto")
-                            .color(Color32::WHITE)
+                            .color(crate::theme::text(ui.visuals().dark_mode))
                             .strong(),
                     )
                     .fill(Color32::from_rgb(12, 165, 214)); // Azure #0CA5D6
@@ -100,9 +100,9 @@ impl MonthView {
                 ui.add_space(35.0);
 
                 ui.label(
-                    RichText::new("Scegli come iniziare la pulizia:")
+                    RichText::new("Choose how to start:")
                         .size(18.0)
-                        .color(Color32::WHITE),
+                        .color(crate::theme::text(ui.visuals().dark_mode)),
                 );
                 ui.add_space(20.0);
 
@@ -111,28 +111,28 @@ impl MonthView {
 
                     // Option 1: Select single folder
                     let folder_card = egui::Frame::group(ui.style())
-                        .fill(Color32::from_rgb(24, 41, 54)) // #182936
+                        .fill(crate::theme::surface_raised(ui.visuals().dark_mode)) // #182936
                         .corner_radius(CornerRadius::same(16))
-                        .stroke(Stroke::new(1.0, Color32::from_rgb(45, 68, 85)));
+                        .stroke(Stroke::new(1.0, crate::theme::border(ui.visuals().dark_mode)));
 
                     folder_card.show(ui, |ui| {
                         ui.set_width(280.0);
                         ui.vertical_centered(|ui| {
                             ui.add_space(15.0);
                             ui.label(RichText::new("📁").size(40.0));
-                            ui.heading("Cartella Specifica");
+                            ui.heading("Single Folder");
                             ui.add_space(8.0);
                             ui.label(
-                                RichText::new("Scegli manualmente una cartella singola da ripulire.")
-                                    .color(Color32::from_rgb(187, 209, 219))
+                                RichText::new("Choose one folder to review manually.")
+                                    .color(crate::theme::muted(ui.visuals().dark_mode))
                                     .size(13.0),
                             );
                             ui.add_space(15.0);
                             if ui
                                 .add(
                                     egui::Button::new(
-                                        RichText::new("Scegli Cartella...")
-                                            .color(Color32::WHITE)
+                                        RichText::new("Choose Folder...")
+                                            .color(crate::theme::text(ui.visuals().dark_mode))
                                             .strong(),
                                     )
                                     .fill(Color32::from_rgb(17, 118, 145)) // Deep Teal
@@ -148,7 +148,7 @@ impl MonthView {
 
                     // Option 2: Automatic System Scan
                     let auto_card = egui::Frame::group(ui.style())
-                        .fill(Color32::from_rgb(24, 41, 54))
+                        .fill(crate::theme::surface_raised(ui.visuals().dark_mode))
                         .corner_radius(CornerRadius::same(16))
                         .stroke(Stroke::new(1.5, Color32::from_rgb(12, 165, 214))); // Border Azure
 
@@ -157,11 +157,11 @@ impl MonthView {
                         ui.vertical_centered(|ui| {
                             ui.add_space(15.0);
                             ui.label(RichText::new("🌐").size(40.0));
-                            ui.heading("Tutte le Immagini del PC");
+                            ui.heading("All Images on This PC");
                             ui.add_space(8.0);
                             ui.label(
-                                RichText::new("Cerca automaticamente in Immagini, OneDrive, Download e le ordina per data.")
-                                    .color(Color32::from_rgb(187, 209, 219))
+                                RichText::new("Automatically scan mounted drives and sort images by date.")
+                                    .color(crate::theme::muted(ui.visuals().dark_mode))
                                     .size(13.0),
                             );
                             ui.add_space(15.0);
@@ -169,7 +169,7 @@ impl MonthView {
                                 .add(
                                     egui::Button::new(
                                         RichText::new("⚡ Scansiona Tutto il PC")
-                                            .color(Color32::WHITE)
+                                            .color(crate::theme::text(ui.visuals().dark_mode))
                                             .strong(),
                                     )
                                     .fill(Color32::from_rgb(12, 165, 214)) // Azure #0CA5D6
@@ -208,20 +208,20 @@ impl MonthView {
 
         ScrollArea::vertical().show(ui, |ui| {
             ui.add_space(10.0);
-            ui.heading("📅 Revisione per Mese / Data");
+            ui.heading("📅 Review by Month / Date");
             ui.add_space(8.0);
 
             for (_, group) in groups.iter().rev() {
                 egui::Frame::group(ui.style())
-                    .fill(Color32::from_rgb(24, 41, 54))
+                    .fill(crate::theme::surface_raised(ui.visuals().dark_mode))
                     .corner_radius(CornerRadius::same(12))
-                    .stroke(Stroke::new(1.0, Color32::from_rgb(45, 68, 85)))
+                    .stroke(Stroke::new(1.0, crate::theme::border(ui.visuals().dark_mode)))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.vertical(|ui| {
                                 ui.heading(&group.label);
                                 ui.label(format!(
-                                    "{} foto  •  {} totali",
+                                    "{} photos  •  {} total",
                                     group.indices.len(),
                                     crate::model::media::format_bytes(group.total_bytes)
                                 ));
@@ -250,14 +250,14 @@ impl MonthView {
                                     .unwrap_or_else(|| *group.indices.first().unwrap_or(&0));
 
                                 let btn_text = if group.unreviewed > 0 {
-                                    format!("🧹 Pulisci Mese ({} rimanenti)", group.unreviewed)
+                                    format!("🧹 Review Month ({} remaining)", group.unreviewed)
                                 } else {
                                     "🔍 Rivedi Foto".to_string()
                                 };
 
                                 let clean_btn = egui::Button::new(
                                     RichText::new(btn_text)
-                                        .color(Color32::WHITE)
+                                        .color(crate::theme::text(ui.visuals().dark_mode))
                                         .strong(),
                                 )
                                 .fill(if group.unreviewed > 0 {

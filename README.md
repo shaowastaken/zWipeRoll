@@ -44,7 +44,15 @@ Windows Foto e l'Esplora Risorse sono notoriamente lenti quando si tratta di far
 ## 🚀 Due Modalità di Selezione
 
 1. **📁 Cartella Specifica**: Scegli manualmente una cartella singola da ripulire.
-2. **🌐 Tutte le Immagini del PC**: Scansiona automaticamente le cartelle immagini standard dell'utente (Immagini, OneDrive, Download) e le ordina cronologicamente.
+2. **Global Scan**: Select detected Windows drives or add a custom location. The scan indexes folders containing supported images and shows progress, exclusions and read errors. Cancellation retains the previous catalog. Resynchronization preserves unselected locations and unreadable folders, together with album progress. This is not a guarantee that protected, unsupported or cloud-only images are accessible.
+
+The exclusion and format policy is shown before scanning; its implementation lives in [the scanner](src/filesystem/scanner.rs). Global indexing does not delete source images. See [the roadmap](ROADMAP.md) for verification status and remaining work.
+
+Windows libraries remember volume identity rather than assuming a drive letter always belongs to the same disk. Offline albums keep their progress, and a reused mount path is blocked to avoid mixing different disks. Reconnect the original volume and use **Refresh drives** when a location is unavailable. Migration limitations and hardware acceptance status are recorded in [the roadmap](ROADMAP.md#2-volume-identity-and-offline-libraries--implemented-hardware-acceptance-pending).
+
+Real folders and virtual month albums retain decisions and their own current photo across reopening and resynchronization. **Continue last album** prefers the last selected month when applicable. Resuming follows the saved photo path; if that photo was removed, it falls back to the saved position within the remaining album. Overlapping folders share decisions and do not duplicate photos in virtual months. Real folders can be sorted by date or size in either direction; months are chronological in either direction and use local file modification dates, not EXIF capture dates. Undated photos remain in real folders.
+
+Borderless window gestures delegate to Windows so native resizing and restoration share one owner. Drag the reserved top strip or logo area; use the green circle or double-click a title area to toggle maximize. Automated checks and outstanding native acceptance are recorded in [the roadmap](ROADMAP.md#borderless-window-controls--automated-checks-passed-native-acceptance-pending).
 
 ---
 

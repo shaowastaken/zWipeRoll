@@ -29,11 +29,11 @@ impl SummaryView {
         let mut action = SummaryAction::None;
 
         ui.horizontal(|ui| {
-            if ui.button("← Torna alla Revisione").clicked() {
+            if ui.button("← Back to Review").clicked() {
                 action = SummaryAction::BackToSwipe;
             }
 
-            ui.heading("🗑️ Revisione Cestino");
+            ui.heading("🗑️ Trash Review");
         });
 
         ui.separator();
@@ -50,7 +50,7 @@ impl SummaryView {
             ui.vertical_centered(|ui| {
                 ui.label(
                     RichText::new(format!(
-                        "✅ Eliminati con successo {} elementi nel Cestino di Windows!",
+                        "✅ Moved {} items to the Windows Recycle Bin!",
                         deleted_count
                     ))
                     .size(20.0)
@@ -61,7 +61,7 @@ impl SummaryView {
                 ui.add_space(8.0);
                 ui.label(
                     RichText::new(format!(
-                        "Spazio totale recuperato: {}",
+                        "Total space recovered: {}",
                         crate::model::media::format_bytes(freed_bytes)
                     ))
                     .size(16.0)
@@ -71,7 +71,7 @@ impl SummaryView {
                 if error_count > 0 {
                     ui.add_space(10.0);
                     ui.label(
-                        RichText::new(format!("⚠️ Si sono verificati {} errori", error_count))
+                        RichText::new(format!("⚠️ {error_count} errors occurred"))
                             .color(Color32::from_rgb(239, 68, 68)),
                     );
                 }
@@ -79,7 +79,7 @@ impl SummaryView {
                 ui.add_space(24.0);
                 if ui
                     .add(
-                        egui::Button::new(RichText::new("OK, Torna all'App").size(15.0).strong())
+                        egui::Button::new(RichText::new("OK, Back to App").size(15.0).strong())
                             .fill(Color32::from_rgb(12, 165, 214)) // Azure #0CA5D6
                             .min_size(vec2(160.0, 40.0)),
                     )
@@ -100,9 +100,9 @@ impl SummaryView {
         if stats.trashed == 0 {
             ui.vertical_centered(|ui| {
                 ui.add_space(60.0);
-                ui.label(RichText::new("Nessun elemento contrassegnato per il cestino.").size(16.0));
+                ui.label(RichText::new("No items marked for deletion.").size(16.0));
                 ui.add_space(20.0);
-                if ui.button("Torna allo Swipe").clicked() {
+                if ui.button("Back to Review").clicked() {
                     action = SummaryAction::BackToSwipe;
                 }
             });
@@ -114,7 +114,7 @@ impl SummaryView {
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new(format!(
-                    "Stai per liberare {} ({} foto)",
+                    "You are about to free {} ({} photos)",
                     crate::model::media::format_bytes(stats.trash_bytes),
                     stats.trashed
                 ))
@@ -126,10 +126,10 @@ impl SummaryView {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let delete_btn = egui::Button::new(
                     RichText::new(format!(
-                        "🗑️ CONFERMA ED ELIMINA NEL CESTINO ({})",
+                        "🗑️ MOVE TO RECYCLE BIN ({})",
                         stats.trashed
                     ))
-                    .color(Color32::WHITE)
+                    .color(crate::theme::text(ui.visuals().dark_mode))
                     .size(15.0)
                     .strong(),
                 )
@@ -162,8 +162,8 @@ impl SummaryView {
         ui.separator();
 
         ui.label(
-            RichText::new("Controlla gli elementi prima di eliminarli definitivamente:")
-                .color(Color32::from_rgb(187, 209, 219)),
+            RichText::new("Review these items before moving them to the Recycle Bin:")
+                .color(crate::theme::muted(ui.visuals().dark_mode)),
         );
         ui.add_space(6.0);
 
@@ -173,28 +173,28 @@ impl SummaryView {
             for (idx, item) in session.items.iter().enumerate() {
                 if item.decision == Decision::Trash {
                     egui::Frame::group(ui.style())
-                        .fill(Color32::from_rgb(24, 41, 54))
+                        .fill(crate::theme::surface_raised(ui.visuals().dark_mode))
                         .corner_radius(CornerRadius::same(8))
-                        .stroke(Stroke::new(1.0, Color32::from_rgb(45, 68, 85)))
+                        .stroke(Stroke::new(1.0, crate::theme::border(ui.visuals().dark_mode)))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label("🗑️");
                                 ui.label(RichText::new(&item.file_name).strong());
                                 ui.label(
                                     RichText::new(format!("({})", item.formatted_size()))
-                                        .color(Color32::from_rgb(187, 209, 219)),
+                                        .color(crate::theme::muted(ui.visuals().dark_mode)),
                                 );
                                 ui.label(
                                     RichText::new(item.year_month_label())
-                                        .color(Color32::from_rgb(187, 209, 219)),
+                                        .color(crate::theme::muted(ui.visuals().dark_mode)),
                                 );
 
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                     if ui
                                         .add(
                                             egui::Button::new(
-                                                RichText::new("⭐ Salva (Conserva)")
-                                                    .color(Color32::WHITE),
+                                                RichText::new("⭐ Keep")
+                                                    .color(crate::theme::text(ui.visuals().dark_mode)),
                                             )
                                             .fill(Color32::from_rgb(34, 197, 94)), // Keep #22C55E
                                         )

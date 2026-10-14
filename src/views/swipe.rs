@@ -1,9 +1,9 @@
+use crate::imaging::TextureCache;
+use crate::model::{Decision, MediaEntry, Session};
 use egui::{
     vec2, Align2, Color32, CornerRadius, FontId, Key, Pos2, Rect, Sense, Stroke, StrokeKind, Ui,
     Vec2,
 };
-use crate::imaging::TextureCache;
-use crate::model::{Decision, MediaEntry, Session};
 
 pub enum SwipeAction {
     None,
@@ -43,9 +43,9 @@ impl SwipeView {
         if session.items.is_empty() {
             ui.vertical_centered(|ui| {
                 ui.add_space(80.0);
-                ui.heading("Nessuna immagine in revisione.");
+                ui.heading("No images to review.");
                 ui.add_space(10.0);
-                ui.label("Seleziona una cartella dalla sezione Folders o avvia una scansione.");
+                ui.label("Choose a single folder or open an album from the global library.");
             });
             return action;
         }
@@ -61,21 +61,45 @@ impl SwipeView {
             let avail_w = ui.available_width();
             let center_x = ui.cursor().left() + avail_w / 2.0;
 
+            if let Some(item) = session.current_item() {
+                ui.vertical(|ui| {
+                    ui.set_max_width((avail_w * 0.34).max(120.0));
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(&item.file_name)
+                                .strong()
+                                .color(crate::theme::text(ui.visuals().dark_mode)),
+                        )
+                        .truncate(),
+                    );
+                    ui.label(
+                        egui::RichText::new(crate::model::media::format_bytes(item.file_size))
+                            .size(11.0)
+                            .color(crate::theme::muted(ui.visuals().dark_mode)),
+                    );
+                });
+            }
+
             ui.painter().text(
                 Pos2::new(center_x, ui.cursor().center().y),
                 Align2::CENTER_CENTER,
                 counter_str,
                 FontId::proportional(14.0),
-                Color32::from_rgb(186, 206, 218),
+                crate::theme::muted(ui.visuals().dark_mode),
             );
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(8.0);
-                if ui.button("•••").on_hover_text("Opzioni").clicked() {
+                if ui.button("•••").on_hover_text("Open trash").clicked() {
                     action = SwipeAction::OpenTrash;
                 }
-                if ui.button("⛶").on_hover_text("Schermo Intero").clicked() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
+                if ui.button("⛶").on_hover_text("Toggle fullscreen").clicked() {
+                    let fullscreen = ui
+                        .ctx()
+                        .input(|input| input.viewport().fullscreen)
+                        .unwrap_or(false);
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fullscreen));
                 }
             });
         });
@@ -85,8 +109,7 @@ impl SwipeView {
         // 2. Center Card Area (Occupies most vertical space)
         let card_area_h = (ui.available_height() - 110.0).max(280.0);
         let card_area_w = ui.available_width();
-        let (deck_rect, _) =
-            ui.allocate_exact_size(vec2(card_area_w, card_area_h), Sense::hover());
+        let (deck_rect, _) = ui.allocate_exact_size(vec2(card_area_w, card_area_h), Sense::hover());
 
         // Preload adjacent images
         let max_w = (card_area_w * 1.5).max(1280.0) as u32;
@@ -119,8 +142,9 @@ impl SwipeView {
 
         // Left arrow ‹
         let left_center = Pos2::new(deck_rect.left() + 24.0, arrow_y);
-        let left_rect = Rect::from_center_size(left_center, vec2(arrow_radius * 2.0, arrow_radius * 2.0));
-        let left_resp = ui.allocate_rect(left_rect, Sense::click());
+        let left_rect =
+            Rect::from_center_size(left_center, vec2(arrow_radius * 2.0, arrow_radius * 2.0));
+        let left_resp = ui.interact(left_rect, egui::Id::new("review_previous"), Sense::click());
         let left_hover = left_resp.hovered();
 
         ui.painter().circle_filled(
@@ -137,7 +161,7 @@ impl SwipeView {
             Align2::CENTER_CENTER,
             "‹",
             FontId::proportional(26.0),
-            Color32::WHITE,
+            crate::theme::text(ui.visuals().dark_mode),
         );
         if left_resp.clicked() {
             session.prev();
@@ -146,8 +170,9 @@ impl SwipeView {
 
         // Right arrow ›
         let right_center = Pos2::new(deck_rect.right() - 24.0, arrow_y);
-        let right_rect = Rect::from_center_size(right_center, vec2(arrow_radius * 2.0, arrow_radius * 2.0));
-        let right_resp = ui.allocate_rect(right_rect, Sense::click());
+        let right_rect =
+            Rect::from_center_size(right_center, vec2(arrow_radius * 2.0, arrow_radius * 2.0));
+        let right_resp = ui.interact(right_rect, egui::Id::new("review_next"), Sense::click());
         let right_hover = right_resp.hovered();
 
         ui.painter().circle_filled(
@@ -164,78 +189,89 @@ impl SwipeView {
             Align2::CENTER_CENTER,
             "›",
             FontId::proportional(26.0),
-            Color32::WHITE,
+            crate::theme::text(ui.visuals().dark_mode),
         );
         if right_resp.clicked() {
             session.next();
             self.drag_offset = Vec2::ZERO;
         }
 
-        // 4. Bottom Dock: Exact Round Circles 58px (#EF4444 and #22C55E)
-        ui.add_space(8.0);
-        ui.vertical_centered(|ui| {
-            ui.horizontal_centered(|ui| {
-                ui.spacing_mut().item_spacing.x = 45.0;
-
-                // Red Circle Trash (58px)
-                let circle_size = vec2(58.0, 58.0);
-                let (trash_rect, trash_resp) = ui.allocate_exact_size(circle_size, Sense::click());
-                let trash_hover = trash_resp.hovered();
-
-                let trash_color = if trash_hover {
-                    Color32::from_rgb(255, 80, 80)
-                } else {
-                    Color32::from_rgb(239, 68, 68) // #EF4444
-                };
-
-                ui.painter().circle_filled(trash_rect.center(), 28.0, trash_color);
-                ui.painter().text(
-                    trash_rect.center(),
-                    Align2::CENTER_CENTER,
-                    "🗑",
-                    FontId::proportional(24.0),
-                    Color32::WHITE,
-                );
-
-                if trash_resp.clicked() {
-                    session.apply_decision(Decision::Trash);
-                    self.drag_offset = Vec2::ZERO;
-                }
-
-                // Green Circle Keep (58px)
-                let (keep_rect, keep_resp) = ui.allocate_exact_size(circle_size, Sense::click());
-                let keep_hover = keep_resp.hovered();
-
-                let keep_color = if keep_hover {
-                    Color32::from_rgb(46, 215, 108)
-                } else {
-                    Color32::from_rgb(34, 197, 94) // #22C55E
-                };
-
-                ui.painter().circle_filled(keep_rect.center(), 28.0, keep_color);
-                ui.painter().text(
-                    keep_rect.center(),
-                    Align2::CENTER_CENTER,
-                    "✓",
-                    FontId::proportional(26.0),
-                    Color32::WHITE,
-                );
-
-                if keep_resp.clicked() {
-                    session.apply_decision(Decision::Keep);
-                    self.drag_offset = Vec2::ZERO;
-                }
-            });
-
-            ui.add_space(4.0);
-
-            // Subtitle label: "Swipe or use ← →"
-            ui.label(
-                egui::RichText::new("Swipe or use A / D • ← →")
-                    .size(12.0)
-                    .color(Color32::from_rgb(110, 139, 158)),
+        // 4. Bottom Dock: Delete on the left, Keep on the right.
+        ui.add_space(6.0);
+        let (dock, _) = ui.allocate_exact_size(vec2(ui.available_width(), 86.0), Sense::hover());
+        let delete_center = dock.center_top() + vec2(-62.0, 30.0);
+        let keep_center = dock.center_top() + vec2(62.0, 30.0);
+        for (index, (center, decision, shortcut, base, hover)) in [
+            (
+                delete_center,
+                Decision::Trash,
+                "Press A",
+                Color32::from_rgb(255, 38, 57),
+                Color32::from_rgb(255, 80, 80),
+            ),
+            (
+                keep_center,
+                Decision::Keep,
+                "Press D",
+                Color32::from_rgb(12, 202, 104),
+                Color32::from_rgb(46, 215, 108),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let hit = Rect::from_center_size(center, vec2(58.0, 58.0));
+            let response = ui.interact(
+                hit,
+                egui::Id::new(("review_decision", index)),
+                Sense::click(),
             );
-        });
+            ui.painter()
+                .circle_filled(center, 28.0, if response.hovered() { hover } else { base });
+            let stroke = Stroke::new(2.0, Color32::WHITE);
+            if decision == Decision::Trash {
+                ui.painter().rect_stroke(
+                    Rect::from_center_size(center + vec2(0.0, 2.0), vec2(12.0, 15.0)),
+                    CornerRadius::same(2),
+                    stroke,
+                    StrokeKind::Inside,
+                );
+                ui.painter().line_segment(
+                    [center + vec2(-8.0, -7.0), center + vec2(8.0, -7.0)],
+                    stroke,
+                );
+                ui.painter().line_segment(
+                    [center + vec2(-3.0, -10.0), center + vec2(3.0, -10.0)],
+                    stroke,
+                );
+                for x in [-2.0, 2.0] {
+                    ui.painter().line_segment(
+                        [center + vec2(x, -3.0), center + vec2(x, 6.0)],
+                        Stroke::new(1.3, Color32::WHITE),
+                    );
+                }
+            } else {
+                ui.painter().line(
+                    vec![
+                        center + vec2(-9.0, 0.0),
+                        center + vec2(-2.0, 7.0),
+                        center + vec2(11.0, -7.0),
+                    ],
+                    Stroke::new(2.5, Color32::WHITE),
+                );
+            }
+            ui.painter().text(
+                center + vec2(0.0, 38.0),
+                Align2::CENTER_CENTER,
+                shortcut,
+                FontId::proportional(11.5),
+                crate::theme::muted(ui.visuals().dark_mode),
+            );
+            if response.clicked() {
+                session.apply_decision(decision);
+                self.drag_offset = Vec2::ZERO;
+            }
+        }
 
         action
     }
@@ -252,7 +288,7 @@ impl SwipeView {
         let center = deck_rect.center() + self.drag_offset;
         let card_rect = Rect::from_center_size(center, card_size);
 
-        let response = ui.allocate_rect(card_rect, Sense::drag());
+        let response = ui.interact(card_rect, egui::Id::new("review_card"), Sense::drag());
 
         if response.dragged() {
             self.is_dragging = true;
@@ -277,7 +313,7 @@ impl SwipeView {
         painter.rect_filled(
             card_rect,
             CornerRadius::same(20),
-            Color32::from_rgb(18, 30, 42),
+            crate::theme::surface(ui.visuals().dark_mode),
         );
 
         // Swipe tint/glow
@@ -304,7 +340,7 @@ impl SwipeView {
             painter.rect_stroke(
                 card_rect,
                 CornerRadius::same(20),
-                Stroke::new(1.0, Color32::from_rgb(38, 58, 76)),
+                Stroke::new(1.0, crate::theme::border(ui.visuals().dark_mode)),
                 StrokeKind::Inside,
             );
         }
@@ -332,7 +368,7 @@ impl SwipeView {
                 Align2::CENTER_CENTER,
                 "Loading...",
                 FontId::proportional(16.0),
-                Color32::from_rgb(110, 139, 158),
+                crate::theme::muted(ui.visuals().dark_mode),
             );
         }
     }

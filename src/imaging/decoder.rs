@@ -1,14 +1,14 @@
-use std::path::{Path, PathBuf};
 use egui::{ColorImage, Context};
 use image::GenericImageView;
+use std::path::{Path, PathBuf};
 
 pub fn load_and_downscale(path: &Path, max_w: u32, max_h: u32) -> Result<ColorImage, String> {
     let img = image::ImageReader::open(path)
         .map_err(|e| format!("Impossibile aprire {}: {}", path.display(), e))?
         .with_guessed_format()
-        .map_err(|e| format!("Formato non riconosciuto per {}: {}", path.display(), e))?
+        .map_err(|e| format!("Unsupported format for {}: {}", path.display(), e))?
         .decode()
-        .map_err(|e| format!("Errore di decodifica per {}: {}", path.display(), e))?;
+        .map_err(|e| format!("Could not decode {}: {}", path.display(), e))?;
 
     let (orig_w, orig_h) = img.dimensions();
 
@@ -32,7 +32,8 @@ pub struct ImageLoader {
 impl ImageLoader {
     pub fn new(worker_count: usize, ctx: Option<Context>) -> Self {
         let (req_tx, req_rx) = crossbeam_channel::unbounded::<(PathBuf, u32, u32)>();
-        let (res_tx, res_rx) = crossbeam_channel::unbounded::<(PathBuf, Result<ColorImage, String>)>();
+        let (res_tx, res_rx) =
+            crossbeam_channel::unbounded::<(PathBuf, Result<ColorImage, String>)>();
 
         for _ in 0..worker_count {
             let rx = req_rx.clone();
